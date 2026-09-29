@@ -47,6 +47,7 @@ int main(int argc, char **argv) {
 	std::unordered_map< Connection *, Player * > connection_to_player;
 	//keep track of game state:
 	Game game;
+	game.populate_npcs();
 
 	while (true) {
 		static auto next_tick = std::chrono::steady_clock::now() + std::chrono::duration< double >(Game::Tick);
@@ -93,6 +94,7 @@ int main(int argc, char **argv) {
 						bool handled_message;
 						do {
 							handled_message = false;
+							if (player.recv_join_message(c)) handled_message = true;
 							if (player.controls.recv_controls_message(c)) handled_message = true;
 							//TODO: extend for more message types as needed
 						} while (handled_message);

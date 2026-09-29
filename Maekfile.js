@@ -133,7 +133,12 @@ let copies = [
 	maek.COPY(`${NEST_LIBS}/opusfile/dist/README-opusfile.txt`, `dist/README-opusfile.txt`),
 	maek.COPY(`${NEST_LIBS}/libogg/dist/README-libogg.txt`, `dist/README-libogg.txt`),
 	maek.COPY(`${NEST_LIBS}/harfbuzz/dist/README-harfbuzz.txt`, `dist/README-harfbuzz.txt`),
-	maek.COPY(`${NEST_LIBS}/freetype/dist/README-freetype.txt`, `dist/README-freetype.txt`)
+	maek.COPY(`${NEST_LIBS}/freetype/dist/README-freetype.txt`, `dist/README-freetype.txt`),
+	maek.COPY(`meshes/sea.pnct`, `dist/sea.pnct`),
+	maek.COPY(`meshes/sea.scene`, `dist/sea.scene`),
+	maek.COPY(`meshes/fish.pnct`, `dist/fish.pnct`),
+	maek.COPY(`fonts/Original_Surfer/OriginalSurfer-Regular.ttf`, `dist/Original_Surfer/OriginalSurfer-Regular.ttf`),
+	maek.COPY(`fonts/Original_Surfer/OFL.txt`, `dist/Original_Surfer/OFL.txt`)
 ];
 if (maek.OS === 'windows') {
 	copies.push( maek.COPY(`${NEST_LIBS}/SDL3/dist/SDL3.dll`, `dist/SDL3.dll`) );
@@ -152,8 +157,10 @@ if (maek.OS === 'windows') {
 const client_names = [
 	maek.CPP('client.cpp'),
 	maek.CPP('PlayMode.cpp'),
-	maek.CPP('LitColorTextureProgram.cpp'),
-	//maek.CPP('ColorTextureProgram.cpp'),  //not used right now, but you might want it
+	maek.CPP('SeaProgram.cpp'),
+	maek.CPP('SeaMeshes.cpp'),
+	maek.CPP('SeaView.cpp'),
+	maek.CPP('TextRenderer.cpp'),
 	maek.CPP('Sound.cpp'),
 	maek.CPP('load_wav.cpp'),
 	maek.CPP('load_opus.cpp')

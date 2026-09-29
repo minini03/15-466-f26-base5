@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <memory>
 #include <algorithm>
+#include <string>
 
 #ifdef _WIN32
 extern "C" { uint32_t GetACP(); }
@@ -36,13 +37,42 @@ int main(int argc, char **argv) {
 	try {
 #endif
 	//------------ command line arguments ------------
-	if (argc != 3) {
-		std::cerr << "Usage:\n\t./client <host> <port>" << std::endl;
+	if (argc != 7) {
+		std::cerr << "Usage:\n\t./client <host> <port> <name> <r> <g> <b>\n"
+			"\tr, g, b are integers from 0 to 255.\n"
+			"\tExample: ./client localhost 12345 Ada 80 180 255" << std::endl;
 		return 1;
 	}
 
+	std::string player_name = argv[3];
+	if (player_name.empty() || player_name.size() > 24) {
+		std::cerr << "Name must be 1 to 24 characters." << std::endl;
+		return 1;
+	}
+	int rgb[3];
+	for (int i = 0; i < 3; ++i) {
+		try {
+			rgb[i] = std::stoi(argv[4 + i]);
+		} catch (std::exception const &) {
+			std::cerr << "Color channel " << argv[4 + i] << " is not an integer." << std::endl;
+			return 1;
+		}
+		if (rgb[i] < 0 || rgb[i] > 255) {
+			std::cerr << "Color channel " << rgb[i] << " is outside 0..255." << std::endl;
+			return 1;
+		}
+	}
+	glm::vec3 player_color(rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f);
+
 	//------------ connect to server --------------
 	Client client(argv[1], argv[2]);
+
+	{
+		Player identity;
+		identity.name = player_name;
+		identity.color = player_color;
+		identity.send_join_message(&client.connection);
+	}
 
 	//------------  initialization ------------
 
@@ -65,7 +95,7 @@ int main(int argc, char **argv) {
 
 	//create window:
 	Mode::window = SDL_CreateWindow(
-		"gp25 game6: multiplayer", //TODO: remember to set a title for your game!
+		"Big fish eat small fish",
 		1280, 720, //TODO: modify window size if you'd like
 		SDL_WINDOW_OPENGL
 		| SDL_WINDOW_RESIZABLE //uncomment to allow resizing

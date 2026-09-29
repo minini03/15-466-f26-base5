@@ -1,16 +1,11 @@
 #include "PlayMode.hpp"
 
-#include "DrawLines.hpp"
-#include "gl_errors.hpp"
-#include "data_path.hpp"
-#include "hex_dump.hpp"
+#include "SeaView.hpp"
 
-#include <glm/gtc/type_ptr.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/string_cast.hpp>
-
-#include <random>
-#include <array>
+#include <algorithm>
+#include <cassert>
+#include <iostream>
+#include <stdexcept>
 
 PlayMode::PlayMode(Client &client_) : client(client_) {
 }
@@ -19,46 +14,50 @@ PlayMode::~PlayMode() {
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
+	(void)window_size;
+
+	auto set_down = [](Button &b) {
+		b.downs += 1;
+		b.pressed = true;
+	};
+	auto set_up = [](Button &b) {
+		b.pressed = false;
+	};
 
 	if (evt.type == SDL_EVENT_KEY_DOWN) {
 		if (evt.key.repeat) {
 			//ignore repeats
-		} else if (evt.key.key == SDLK_A) {
-			controls.left.downs += 1;
-			controls.left.pressed = true;
+		} else if (evt.key.key == SDLK_A || evt.key.key == SDLK_LEFT) {
+			set_down(controls.left);
 			return true;
-		} else if (evt.key.key == SDLK_D) {
-			controls.right.downs += 1;
-			controls.right.pressed = true;
+		} else if (evt.key.key == SDLK_D || evt.key.key == SDLK_RIGHT) {
+			set_down(controls.right);
 			return true;
-		} else if (evt.key.key == SDLK_W) {
-			controls.up.downs += 1;
-			controls.up.pressed = true;
+		} else if (evt.key.key == SDLK_W || evt.key.key == SDLK_UP) {
+			set_down(controls.up);
 			return true;
-		} else if (evt.key.key == SDLK_S) {
-			controls.down.downs += 1;
-			controls.down.pressed = true;
+		} else if (evt.key.key == SDLK_S || evt.key.key == SDLK_DOWN) {
+			set_down(controls.down);
 			return true;
 		} else if (evt.key.key == SDLK_SPACE) {
-			controls.jump.downs += 1;
-			controls.jump.pressed = true;
+			set_down(controls.jump);
 			return true;
 		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
-		if (evt.key.key == SDLK_A) {
-			controls.left.pressed = false;
+		if (evt.key.key == SDLK_A || evt.key.key == SDLK_LEFT) {
+			set_up(controls.left);
 			return true;
-		} else if (evt.key.key == SDLK_D) {
-			controls.right.pressed = false;
+		} else if (evt.key.key == SDLK_D || evt.key.key == SDLK_RIGHT) {
+			set_up(controls.right);
 			return true;
-		} else if (evt.key.key == SDLK_W) {
-			controls.up.pressed = false;
+		} else if (evt.key.key == SDLK_W || evt.key.key == SDLK_UP) {
+			set_up(controls.up);
 			return true;
-		} else if (evt.key.key == SDLK_S) {
-			controls.down.pressed = false;
+		} else if (evt.key.key == SDLK_S || evt.key.key == SDLK_DOWN) {
+			set_up(controls.down);
 			return true;
 		} else if (evt.key.key == SDLK_SPACE) {
-			controls.jump.pressed = false;
+			set_up(controls.jump);
 			return true;
 		}
 	}
@@ -67,6 +66,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
+	time += elapsed;
 
 	//queue data for sending to server:
 	controls.send_controls_message(&client.connection);
@@ -86,7 +86,6 @@ void PlayMode::update(float elapsed) {
 			std::cout << "[" << c->socket << "] closed (!)" << std::endl;
 			throw std::runtime_error("Lost connection to server!");
 		} else { assert(event == Connection::OnRecv);
-			//std::cout << "[" << c->socket << "] recv'd data. Current buffer:\n" << hex_dump(c->recv_buffer); std::cout.flush(); //DEBUG
 			bool handled_message;
 			try {
 				do {
@@ -100,84 +99,15 @@ void PlayMode::update(float elapsed) {
 			}
 		}
 	}, 0.0);
+
+	if (!game.players.empty()) {
+		float radius = game.players.front().radius;
+		if (prev_radius > 0.0f && radius < prev_radius * 0.75f) notice = 2.4f;
+		prev_radius = radius;
+	}
+	notice = std::max(0.0f, notice - elapsed);
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
-
-	static std::array< glm::vec2, 16 > const circle = [](){
-		std::array< glm::vec2, 16 > ret;
-		for (uint32_t a = 0; a < ret.size(); ++a) {
-			float ang = a / float(ret.size()) * 2.0f * float(M_PI);
-			ret[a] = glm::vec2(std::cos(ang), std::sin(ang));
-		}
-		return ret;
-	}();
-
-	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
-	glDisable(GL_DEPTH_TEST);
-	
-	//figure out view transform to center the arena:
-	float aspect = float(drawable_size.x) / float(drawable_size.y);
-	float scale = std::min(
-		2.0f * aspect / (Game::ArenaMax.x - Game::ArenaMin.x + 2.0f * Game::PlayerRadius),
-		2.0f / (Game::ArenaMax.y - Game::ArenaMin.y + 2.0f * Game::PlayerRadius)
-	);
-	glm::vec2 offset = -0.5f * (Game::ArenaMax + Game::ArenaMin);
-
-	glm::mat4 world_to_clip = glm::mat4(
-		scale / aspect, 0.0f, 0.0f, offset.x,
-		0.0f, scale, 0.0f, offset.y,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	);
-
-	{
-		DrawLines lines(world_to_clip);
-
-		//helper:
-		auto draw_text = [&](glm::vec2 const &at, std::string const &text, float H) {
-			lines.draw_text(text,
-				glm::vec3(at.x, at.y, 0.0),
-				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-				glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-			float ofs = (1.0f / scale) / drawable_size.y;
-			lines.draw_text(text,
-				glm::vec3(at.x + ofs, at.y + ofs, 0.0),
-				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-				glm::u8vec4(0xff, 0xff, 0xff, 0x00));
-		};
-
-		lines.draw(glm::vec3(Game::ArenaMin.x, Game::ArenaMin.y, 0.0f), glm::vec3(Game::ArenaMax.x, Game::ArenaMin.y, 0.0f), glm::u8vec4(0xff, 0x00, 0xff, 0xff));
-		lines.draw(glm::vec3(Game::ArenaMin.x, Game::ArenaMax.y, 0.0f), glm::vec3(Game::ArenaMax.x, Game::ArenaMax.y, 0.0f), glm::u8vec4(0xff, 0x00, 0xff, 0xff));
-		lines.draw(glm::vec3(Game::ArenaMin.x, Game::ArenaMin.y, 0.0f), glm::vec3(Game::ArenaMin.x, Game::ArenaMax.y, 0.0f), glm::u8vec4(0xff, 0x00, 0xff, 0xff));
-		lines.draw(glm::vec3(Game::ArenaMax.x, Game::ArenaMin.y, 0.0f), glm::vec3(Game::ArenaMax.x, Game::ArenaMax.y, 0.0f), glm::u8vec4(0xff, 0x00, 0xff, 0xff));
-
-		for (auto const &player : game.players) {
-			glm::u8vec4 col = glm::u8vec4(player.color.x*255, player.color.y*255, player.color.z*255, 0xff);
-			if (&player == &game.players.front()) {
-				//mark current player (which server sends first):
-				lines.draw(
-					glm::vec3(player.position + Game::PlayerRadius * glm::vec2(-0.5f,-0.5f), 0.0f),
-					glm::vec3(player.position + Game::PlayerRadius * glm::vec2( 0.5f, 0.5f), 0.0f),
-					col
-				);
-				lines.draw(
-					glm::vec3(player.position + Game::PlayerRadius * glm::vec2(-0.5f, 0.5f), 0.0f),
-					glm::vec3(player.position + Game::PlayerRadius * glm::vec2( 0.5f,-0.5f), 0.0f),
-					col
-				);
-			}
-			for (uint32_t a = 0; a < circle.size(); ++a) {
-				lines.draw(
-					glm::vec3(player.position + Game::PlayerRadius * circle[a], 0.0f),
-					glm::vec3(player.position + Game::PlayerRadius * circle[(a+1)%circle.size()], 0.0f),
-					col
-				);
-			}
-
-			draw_text(player.position + glm::vec2(0.0f, -0.1f + Game::PlayerRadius), player.name, 0.09f);
-		}
-	}
-	GL_ERRORS();
+	draw_sea(game, time, notice, drawable_size, text);
 }

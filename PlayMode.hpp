@@ -2,6 +2,7 @@
 
 #include "Connection.hpp"
 #include "Game.hpp"
+#include "TextRenderer.hpp"
 
 #include <glm/glm.hpp>
 
@@ -30,5 +31,11 @@ struct PlayMode : Mode {
 
 	//connection to server:
 	Client &client;
+
+	//local presentation (not part of the synced state):
+	float time = 0.0f;
+	float notice = 0.0f; //seconds left to show "you got eaten"
+	float prev_radius = -1.0f;
+	TextRenderer text;
 
 };
